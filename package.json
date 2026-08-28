@@ -1,0 +1,13 @@
+{
+  "name": "discord-seste-kal-botu",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.16.1",
+    "discord.js": "^14.14.1",
+    "libsodium-wrappers": "^0.7.13"
+  }
+}
