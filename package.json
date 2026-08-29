@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot-manager.js",
+    "start:bot": "node index.js"
   },
   "dependencies": {
     "@discordjs/voice": "^0.16.1",
     "discord.js": "^14.14.1",
-    "libsodium-wrappers": "^0.7.13"
+    "libsodium-wrappers": "^0.7.13",
+    "noblox.js": "^4.12.4",
+    "dotenv": "^16.3.1"
   }
 }

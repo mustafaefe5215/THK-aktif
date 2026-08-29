@@ -12,7 +12,8 @@ module.exports = {
                 .setRequired(true))
         .addStringOption(option => 
             option.setName('rütbe')
-                .setDescription('Verilecek Roblox grup rütbe adı veya Rank numarası (Örn: 1, 255 veya Subay)')
+                .setDescription('Verilecek Roblox grup rütbe adı veya Rank numarası (Örnek: 1, 255 veya Subay)')
+                .setAutocomplete(true)
                 .setRequired(true))
         .addStringOption(option => 
             option.setName('sebep')
@@ -28,6 +29,13 @@ module.exports = {
         const groupId = parseInt(process.env.GROUP_ID);
 
         try {
+            // 0. Noblox.js Kimlik Doğrulaması
+            const cookie = process.env.ROBLOX_COOKIE;
+            if (!cookie) {
+                return interaction.editReply({ content: '❌ ROBLOX_COOKIE .env dosyasında tanımlanmamış!' });
+            }
+            await noblox.setCookie(cookie);
+
             // 1. Roblox Kullanıcı ID'sini Bul
             const userId = await noblox.getIdFromUsername(robloxUsername);
             if (!userId) {
