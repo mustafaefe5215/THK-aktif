@@ -13,7 +13,13 @@ const {
   normalizeWhitelist,
   isWhitelistedId,
   containsAdvertLink,
-  shouldFlagVoiceBurst
+  shouldFlagVoiceBurst,
+  shouldFlagMentionSpam,
+  shouldFlagEmojiSpam,
+  isSuspiciousAccount,
+  shouldFlagRaidJoins,
+  containsSpamWords,
+  getSuspiciousNamePatterns
 } = require('./security-rules');
 require('dotenv').config();
 
@@ -24,6 +30,7 @@ const SECURITY_LOGS = new Map();
 const MESSAGE_TIMESTAMPS = new Map();
 const GUILD_EVENT_TIMESTAMPS = new Map();
 const VOICE_EVENT_TIMESTAMPS = new Map();
+const MEMBER_JOIN_TIMESTAMPS = new Map();
 const WEBHOOK_EVENTS = new Set(['webhookCreate', 'webhookDelete', 'webhookUpdate']);
 const SECURITY_WHITELIST = new Set(normalizeWhitelist(process.env.SECURITY_WHITELIST || ''));
 
@@ -445,6 +452,16 @@ client.on('messageCreate', async message => {
 
   if (isProtectedMember(message.member)) return;
 
+  // Spam kelime filtresi
+  if (containsSpamWords(message.content)) {
+    try {
+      await message.delete().catch(() => {});
+      await applySecurityPenalty(message.member, 'spamAbuse', 'spam kelime / uygunsuz içerik', 'spam kelime / uygunsuz içerik');
+    } catch (error) {
+      console.error('Spam word filter error:', error);
+    }
+  }
+
   const guildWindow = GUILD_EVENT_TIMESTAMPS.get(message.guild.id) || [];
   guildWindow.push(Date.now());
   GUILD_EVENT_TIMESTAMPS.set(message.guild.id, guildWindow.slice(-10));
@@ -460,6 +477,26 @@ client.on('messageCreate', async message => {
       await applySecurityPenalty(message.member, 'everyoneHere', '@everyone / @here spam', '@everyone / @here spam');
     } catch (error) {
       console.error('Message security error:', error);
+    }
+  }
+
+  // Mention spam kontrolü
+  if (shouldFlagMentionSpam(message.content)) {
+    try {
+      await message.delete().catch(() => {});
+      await applySecurityPenalty(message.member, 'mentionSpam', 'aşırı mention spam', 'aşırı mention spam');
+    } catch (error) {
+      console.error('Mention spam error:', error);
+    }
+  }
+
+  // Emoji spam kontrolü
+  if (shouldFlagEmojiSpam(message.content)) {
+    try {
+      await message.delete().catch(() => {});
+      await applySecurityPenalty(message.member, 'emojiSpam', 'aşırı emoji spam', 'aşırı emoji spam');
+    } catch (error) {
+      console.error('Emoji spam error:', error);
     }
   }
 
@@ -493,6 +530,43 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
   if (isDangerousPermissionDelta(oldPerms, newPerms)) {
     await applySecurityPenalty(newMember, 'permissionAbuse', 'yetki artırma / izin değişimi', 'yetki artırma / izin değişimi');
+  }
+});
+
+// Raid koruması - Hızlı katılım tespiti
+client.on('guildMemberAdd', async member => {
+  if (!member || !member.guild || isProtectedMember(member)) return;
+
+  if (!isSecurityEnabled(member.guild)) return;
+
+  // Şüpheli hesap tespiti
+  if (isSuspiciousAccount(member)) {
+    try {
+      await member.send('⚠️ Hesabınız çok yeni veya doğrulanmamış. Lütfen Discord ayarlarından hesabınızı doğrulayın.').catch(() => {});
+      await applySecurityPenalty(member, 'suspiciousAccount', 'şüpheli / yeni hesap katılışı', 'şüpheli / yeni hesap');
+    } catch (error) {
+      console.error('Suspicious account check error:', error);
+    }
+  }
+
+  // Raid join tespiti
+  const joinTimestamps = MEMBER_JOIN_TIMESTAMPS.get(member.guild.id) || [];
+  joinTimestamps.push(Date.now());
+  MEMBER_JOIN_TIMESTAMPS.set(member.guild.id, joinTimestamps.slice(-15));
+
+  if (shouldFlagRaidJoins(joinTimestamps, 10, 60000)) {
+    try {
+      await member.send('🚫 Sunucunuzda çok sayıda hızlı katılım tespit edildi. Acil durum modu aktive edildi!').catch(() => {});
+      await logSecurityEvent(member.guild, member, 'raid join tespiti', 'hızlı katılım saldırısı', 'warn');
+      recordSecurityEvent(member.guild.id, {
+        label: 'RAID UYARISI',
+        reason: '10 üye 1 dakikada katıldı',
+        action: 'system',
+        time: new Date().toLocaleString('tr-TR')
+      });
+    } catch (error) {
+      console.error('Raid join error:', error);
+    }
   }
 });
 

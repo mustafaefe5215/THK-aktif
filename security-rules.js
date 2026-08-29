@@ -43,6 +43,26 @@ const SECURITY_RULES = {
     1: 'warn',
     2: 'remove-role',
     3: 'ban'
+  },
+  mentionSpam: {
+    1: 'warn',
+    2: 'remove-role',
+    3: 'ban'
+  },
+  emojiSpam: {
+    1: 'warn',
+    2: 'remove-role',
+    3: 'ban'
+  },
+  botRaid: {
+    1: 'warn',
+    2: 'ban',
+    3: 'ban'
+  },
+  suspiciousAccount: {
+    1: 'warn',
+    2: 'ban',
+    3: 'ban'
   }
 };
 
@@ -164,6 +184,66 @@ function shouldFlagVoiceBurst(timestamps, threshold = 4, maxWindowMs = 6000) {
   return delta <= maxWindowMs;
 }
 
+function shouldFlagMentionSpam(content) {
+  if (!content || typeof content !== 'string') return false;
+  const mentionMatches = (content.match(/<@\d+>/g) || []).length;
+  const roleMentions = (content.match(/<@&\d+>/g) || []).length;
+  const totalMentions = mentionMatches + roleMentions;
+  return totalMentions >= 5;
+}
+
+function shouldFlagEmojiSpam(content) {
+  if (!content || typeof content !== 'string') return false;
+  const emojiPattern = /[\u{1F300}-\u{1F9FF}]|<a?:\w+:\d+>/gu;
+  const emojis = (content.match(emojiPattern) || []).length;
+  return emojis >= 15;
+}
+
+function isSuspiciousAccount(member) {
+  if (!member) return false;
+  const createdAt = member.user?.createdTimestamp || 0;
+  const now = Date.now();
+  const ageMs = now - createdAt;
+  const ageHours = ageMs / (1000 * 60 * 60);
+  
+  return ageHours < 1 || ageHours < 24 && !member.user?.verified;
+}
+
+function shouldFlagRaidJoins(timestamps, threshold = 10, maxWindowMs = 60000) {
+  if (!Array.isArray(timestamps) || timestamps.length < threshold) return false;
+  const sorted = [...timestamps].sort((a, b) => a - b);
+  const window = sorted.slice(-threshold);
+  const delta = window[window.length - 1] - window[0];
+  return delta <= maxWindowMs;
+}
+
+function containsSpamWords(content) {
+  if (!content || typeof content !== 'string') return false;
+  const spamPatterns = [
+    /free\s*(?:nitro|robux|discord|steam)/i,
+    /click\s*(?:here|link|now)/i,
+    /verify\s*(?:now|account|here)/i,
+    /confirm\s*(?:account|identity|now)/i,
+    /earn\s*(?:money|robux|free)/i,
+    /hack\s*(?:account|free|here)/i,
+    /sex|xxx|porn|nude/i
+  ];
+  
+  return spamPatterns.some(pattern => pattern.test(content));
+}
+
+function getSuspiciousNamePatterns(name) {
+  if (!name || typeof name !== 'string') return false;
+  const suspicious = [
+    /^.{1,2}$/,
+    /^[0-9]{8,}$/,
+    /admin|moderator|owner/i,
+    /null|undefined|deleted/i
+  ];
+  
+  return suspicious.some(pattern => pattern.test(name));
+}
+
 module.exports = {
   SECURITY_RULES,
   getAbuseAction,
@@ -175,5 +255,11 @@ module.exports = {
   normalizeWhitelist,
   isWhitelistedId,
   containsAdvertLink,
-  shouldFlagVoiceBurst
+  shouldFlagVoiceBurst,
+  shouldFlagMentionSpam,
+  shouldFlagEmojiSpam,
+  isSuspiciousAccount,
+  shouldFlagRaidJoins,
+  containsSpamWords,
+  getSuspiciousNamePatterns
 };
